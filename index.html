@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <title>Page Title</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="https://unpkg.com/vue"></script>
+    <script src="https://unpkg.com/vue-speech"></script>
+    <script src="https://unpkg.com/socket.io-client/dist/socket.io.slim.js"></script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script>
+
+const speak = async (text, index) => {
+  if (!speechSynthesis) {
+    return
+  }
+  const message = new SpeechSynthesisUtterance(text)
+  message.voice = await chooseVoice(index)
+  speechSynthesis.speak(message)
+}
+
+const lang = 'en-US'
+const voiceIndex = 2
+
+const getVoices = () => {
+  return new Promise(resolve => {
+    let voices = speechSynthesis.getVoices()
+    if (voices.length) {
+      resolve(voices)
+      return
+    }
+    speechSynthesis.onvoiceschanged = () => {
+      voices = speechSynthesis.getVoices()
+      resolve(voices)
+    }
+  })
+}
+
+const chooseVoice = async (index) => {
+  const voices = (await getVoices()).filter(voice => voice.lang == lang)
+
+  return new Promise(resolve => {
+    resolve(voices[index])
+  })
+}
+
+      const Speech = {
+        props: {
+          lang: {
+            type: String,
+            default: "en-US"
+          }
+        },
+        data: () => ({
+          runtimeTranscription: "",
+          transcription: []
+        }),
+        methods: {
+          checkApi() {
+            window.SpeechRecognition =
+              window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) {
+              return;
+            }
+            const recognition = new SpeechRecognition();
+
+            recognition.lang = this.lang;
+            recognition.interimResults = true;
+            recognition.addEventListener("result", event => {
+              const text = Array.from(event.results)
+                .map(result => result[0])
+                .map(result => result.transcript)
+                .join("");
+
+              this.runtimeTranscription = text;
+            });
+
+            recognition.addEventListener("end", () => {
+              if (this.runtimeTranscription !== "") {
+                this.transcription.push(this.runtimeTranscription);
+
+                this.$emit("onTranscriptionEnd", {
+                  transcription: this.transcription,
+                  lastSentence: this.runtimeTranscription
+                });
+              }
+
+              this.runtimeTranscription = "";
+
+              recognition.start();
+            });
+
+            recognition.start();
+          }
+        },
+
+        mounted() {
+          this.checkApi();
+        },
+        template: `
+        <span>
+          <!--p v-for="word in transcription">{{ word }}</p>
+          <p>{{ runtimeTranscription }}</p-->
+        </span>
+        `
+      };
+
+      Vue.component("Speech", Speech);
+
+      new Vue({
+        el: "#app",
+        data: {
+          socket: io.connect("https://eka-server.now.sh"),
+          sentence: ''
+        },
+        methods: {
+          onEnd({ lastSentence, transcription }) {
+            this.sentence = lastSentence
+            this.socket.emit("message", {
+              message: lastSentence,
+              sender: "voice"
+            });
+          }
+        },
+        mounted() {
+          this.socket.on("message", message => {
+            this.sentence = message.message
+            setTimeout(() => this.sentence = '', 3000)
+            speak(message.message, message.bot ? 9 : 0)
+          });
+        },
+        template: `
+          <div style="height: 100vh; display: flex; justify-content: center; align-items: center; font-size: 3rem; font-family: sans-serif; text-align: center; color: royalblue;">
+            <Speech @onTranscriptionEnd="onEnd" />
+            <span v-if="sentence">{{ sentence }}</span>
+            <span v-if="!sentence" style="opacity: 0.5">🎙️</span>
+          </div>
+        `
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "name": "eka-client",
+  "private": true,
+  "scripts": {
+    "start": "serve"
+  },
+  "now": {
+    "alias": "eka-client"
+  },
+  "dependencies": {
+    "serve": "^10.1.1"
+  }
+}
